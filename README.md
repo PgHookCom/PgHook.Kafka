@@ -9,7 +9,7 @@ docker run --network=host --rm \
   -e PGH_PUBLICATION_NAMES="test_publication" \
   -e PGH_KAFKA_SERVERS="localhost:9092" \
   -e PGH_KAFKA_TOPIC="test_topic" \
-  pghook-kafka
+  pghook/pghook-kafka
 ```
 
 ## Custom message keys
@@ -25,5 +25,5 @@ docker run --network=host --rm \
   -e PGH_KAFKA_TOPIC="test_topic" \
   -e PGH_KAFKA_KEY_FIELDS_1="public.table_a|last_name,first_name" \
   -e PGH_KAFKA_KEY_FIELDS_2="public.table_b|postalcode,address" \
-  pghook-kafka
+  pghook/pghook-kafka
 ```
