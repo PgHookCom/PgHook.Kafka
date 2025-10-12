@@ -68,10 +68,6 @@ namespace PgHook.Kafka
 
             var useCompactJson = cfg.GetValue<bool>("PGH_JSON_COMPACT");
 
-            var useStandardWebhooks = cfg.GetValue<bool>("PGH_USE_STANDARD_WEBHOOKS");
-
-            var execFileArgs = cfg.GetValue<string>("PGH_EXEC_FILE_ARGS") ?? "";
-
             using var pgOutput2Json = PgOutput2JsonBuilder.Create()
                 .WithLoggerFactory(loggerFactory)
                 .WithPgConnectionString(connectionString)
