@@ -17,14 +17,17 @@ namespace PgOutput2Json.Kafka
         {
             _options = options;
             _logger = logger;
+            _partitionMetadata = GetPartitionMetadata(options);
         }
 
         public override Task PublishAsync(JsonMessage message, CancellationToken token)
         {
             var tableName = message.TableName.ToString();
             var msgJson = message.Json.ToString();
+            var msgKey = message.KeyKolValue.ToString();
 
-            var msgKey = GetMessageKey(message, msgJson, tableName);
+            var partitionKey = GetPartitionKey(msgJson, tableName);
+            var partitionId = GetPartitionId(partitionKey);
 
             if (_options.WriteTableNameToMessageKey) 
             {
@@ -39,6 +42,7 @@ namespace PgOutput2Json.Kafka
                 {
                     { "wal_seq_no", Encoding.UTF8.GetBytes(message.WalSeqNo.ToString()) },
                     { "table_name", Encoding.UTF8.GetBytes(tableName) },
+                    { "partition_key", Encoding.UTF8.GetBytes(partitionKey ?? msgKey) }
                 };
             }
 
@@ -49,14 +53,29 @@ namespace PgOutput2Json.Kafka
                 _logger.LogDebug("Publishing to Topic={Topic}, Key={Key}, Body={Body}", _options.Topic, msgKey, message.Json.ToString());
             }
 
-            producer.Produce(_options.Topic, new Message<string, string>
+            producer.Produce(new TopicPartition(_options.Topic, partitionId), new Message<string, string>
             {
                 Key = msgKey,
                 Value = msgJson,
                 Headers = headers
+            }, 
+            deliveryReport =>
+            {
+                if (deliveryReport.Error.IsError)
+                {
+                    throw new Exception(deliveryReport.Error.Reason);
+                }
             });
-
+            
             return Task.CompletedTask;
+        }
+
+        private int GetPartitionId(string? partitionKey)
+        {
+            if (partitionKey == null || _partitionMetadata.Count == 0) return Partition.Any;
+
+            var index = Math.Abs(partitionKey.GetHashCode()) % _partitionMetadata.Count;
+            return _partitionMetadata[index].PartitionId;
         }
 
         public override Task ConfirmAsync(CancellationToken token)
@@ -96,14 +115,12 @@ namespace PgOutput2Json.Kafka
             config.GroupId = $"{_options.Topic}-dedupe-{Guid.NewGuid()}";
             config.EnableAutoCommit = false;
 
-            var partitionMetadata = GetPartitionMetadata();
-
             using var consumer = new ConsumerBuilder<string, string>(config).Build();
 
             var partitions = new List<TopicPartitionOffset>();
 
             // Step 1, get partitions offsets
-            foreach (var metadata in partitionMetadata)
+            foreach (var metadata in _partitionMetadata)
             {
                 var tpp = new TopicPartition(_options.Topic, new Partition(metadata.PartitionId));
 
@@ -155,14 +172,14 @@ namespace PgOutput2Json.Kafka
             return Task.FromResult(lastWalSeq);
         }
 
-        private List<PartitionMetadata> GetPartitionMetadata()
+        private static List<PartitionMetadata> GetPartitionMetadata(KafkaPublisherOptions options)
         {
-            var config = _options.AdminClientConfig ?? new AdminClientConfig(_options.ProducerConfig.ToDictionary());
+            var config = options.AdminClientConfig ?? new AdminClientConfig(options.ProducerConfig.ToDictionary());
 
             using var adminClient = new AdminClientBuilder(config).Build();
 
-            var metadata = adminClient.GetMetadata(_options.Topic, TimeSpan.FromSeconds(10));
-            var partitions = metadata.Topics.FirstOrDefault(t => t.Topic == _options.Topic)?.Partitions;
+            var metadata = adminClient.GetMetadata(options.Topic, TimeSpan.FromSeconds(10));
+            var partitions = metadata.Topics.FirstOrDefault(t => t.Topic == options.Topic)?.Partitions;
 
             return partitions ?? [];
         }
@@ -183,11 +200,11 @@ namespace PgOutput2Json.Kafka
             return _producer;
         }
 
-        private string GetMessageKey(JsonMessage msg, string msgJson, string tableName)
+        private string? GetPartitionKey(string msgJson, string tableName)
         {
-            if (!_options.MessageKeyFields.TryGetValue(tableName, out var fields))
+            if (!_options.PartitionKeyFields.TryGetValue(tableName, out var fields))
             {
-                return GetDefaultMessageKey(msg);
+                return null;
             }
 
             using var doc = JsonDocument.Parse(msgJson);
@@ -199,34 +216,29 @@ namespace PgOutput2Json.Kafka
                 if (!doc.RootElement.TryGetProperty("k", out rowElement))
                 {
                     // should never happen (we alwayes have either r or k or both)
-                    return GetDefaultMessageKey(msg);
+                    return null;
                 }
             }
 
-            _msgKeyBuilder.Clear();
-            _msgKeyBuilder.Append('[');
+            _partitionKeyBuilder.Clear();
+            _partitionKeyBuilder.Append('[');
 
             foreach (var field in fields)
             {
                 if (rowElement.TryGetProperty(field, out var fieldElement))
                 {
-                    if (_msgKeyBuilder.Length > 1)
+                    if (_partitionKeyBuilder.Length > 1)
                     {
-                        _msgKeyBuilder.Append(',');
+                        _partitionKeyBuilder.Append(',');
                     }
 
-                    _msgKeyBuilder.Append(fieldElement.GetRawText());
+                    _partitionKeyBuilder.Append(fieldElement.GetRawText());
                 }
             }
 
-            _msgKeyBuilder.Append(']');
+            _partitionKeyBuilder.Append(']');
 
-            return _msgKeyBuilder.Length > 2 ? _msgKeyBuilder.ToString() : GetDefaultMessageKey(msg);
-        }
-
-        private string GetDefaultMessageKey(JsonMessage msg)
-        {
-            return msg.KeyKolValue.Length == 0 ? _random.Next().ToString() : msg.KeyKolValue.ToString();
+            return _partitionKeyBuilder.Length > 2 ? _partitionKeyBuilder.ToString() : null;
         }
 
         private IProducer<string, string>? _producer;
@@ -236,6 +248,8 @@ namespace PgOutput2Json.Kafka
 
         private readonly Random _random = new();
 
-        private readonly StringBuilder _msgKeyBuilder = new();
+        private readonly StringBuilder _partitionKeyBuilder = new();
+
+        private List<PartitionMetadata> _partitionMetadata = [];
     }
 }

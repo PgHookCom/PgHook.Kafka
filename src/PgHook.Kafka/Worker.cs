@@ -19,15 +19,17 @@ namespace PgHook.Kafka
                 throw new Exception("PGH_KAFKA_TOPIC is not set");
             }
 
-            var messageKeyFields = new Dictionary<string, List<string>>();
+            var partitionKeyFields = new Dictionary<string, List<string>>();
 
             for (var i = 1; true; i++)
             {
-                var keyFieldsString = cfg.GetValue<string>($"PGH_KAFKA_KEY_FIELDS_{i}");
+                var keyFieldsString = cfg.GetValue<string>($"PGH_KAFKA_PARTITION_KEY_FIELDS_{i}");
                 if (string.IsNullOrWhiteSpace(keyFieldsString)) break;
 
-                AddMessageKeyFields(messageKeyFields, keyFieldsString);
+                AddPartitionKeyFields(partitionKeyFields, keyFieldsString);
             }
+
+            var kafkaWriteHeaders = cfg.GetValue<bool>("PGH_KAFKA_WRITE_HEADERS");
 
             var connectionString = cfg.GetValue<string>("PGH_POSTGRES_CONN") ?? "";
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -87,28 +89,26 @@ namespace PgHook.Kafka
                 {
                     options.ProducerConfig.BootstrapServers = kafkaBootstrapServers; // "localhost:9092";
                     options.Topic = kafkaTopic; // "test_topic";
-                    options.WriteHeaders = false;
-                    options.MessageKeyFields = messageKeyFields;
+                    options.WriteHeaders = kafkaWriteHeaders;
+                    options.PartitionKeyFields = partitionKeyFields;
                 })
                 .Build();
 
             await pgOutput2Json.StartAsync(stoppingToken);
         }
 
-        private static void AddMessageKeyFields(Dictionary<string, List<string>> messageKeyFields, string keyFieldsString)
+        private static void AddPartitionKeyFields(Dictionary<string, List<string>> keyFields, string keyFieldsString)
         {
             var parts = keyFieldsString.Split('|', StringSplitOptions.TrimEntries);
             if (parts.Length != 2) throw new Exception("Invalid key fields string: " + keyFieldsString);
 
             var tableName = parts[0];
 
-            if (!messageKeyFields.TryGetValue(tableName, out var fields))
-            {
-                fields = new List<string>();
-                messageKeyFields.Add(tableName, fields);
-            }
-
-            fields.AddRange(parts[1].Trim().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            List<string> fields = [.. parts[1]
+                .Trim()
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+            
+            keyFields.Add(tableName, fields);
         }
     }
 }

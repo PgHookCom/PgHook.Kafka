@@ -35,9 +35,8 @@ namespace PgOutput2Json.Kafka
         public AdminClientConfig? AdminClientConfig { get; set; }
 
         /// <summary>
-        /// Override the default message key fields if needed. The default is the PK fields,
-        /// but the user might want to override it with FK fields, to ensure children end up in the same partition as parent.
+        /// Override the default partition key fields if needed. The default is the PK fields,
         /// </summary>
-        public Dictionary<string, List<string>> MessageKeyFields { get; set; } = [];
+        public Dictionary<string, List<string>> PartitionKeyFields { get; set; } = [];
     }
 }

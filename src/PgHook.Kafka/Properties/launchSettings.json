@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "PgHook_Kafka": {
+    "PgHook.Kafka": {
       "commandName": "Project",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
