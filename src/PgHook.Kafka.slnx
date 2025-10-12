@@ -1,4 +1,3 @@
 <Solution>
   <Project Path="PgHook.Kafka/PgHook.Kafka.csproj" />
-  <Project Path="PgOutput2Json.Kafka/PgOutput2Json.Kafka.csproj" />
 </Solution>

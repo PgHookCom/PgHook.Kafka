@@ -68,7 +68,7 @@ namespace PgHook.Kafka
 
             var useCompactJson = cfg.GetValue<bool>("PGH_JSON_COMPACT");
 
-            using var pgOutput2Json = PgOutput2JsonBuilder.Create()
+            var pgOutput2JsonBuilder = PgOutput2JsonBuilder.Create()
                 .WithLoggerFactory(loggerFactory)
                 .WithPgConnectionString(connectionString)
                 .WithPgPublications(publicationNames)
@@ -86,8 +86,17 @@ namespace PgHook.Kafka
                     options.ProducerConfig.BootstrapServers = kafkaBootstrapServers; // "localhost:9092";
                     options.Topic = kafkaTopic; // "test_topic";
                     options.WriteHeaders = kafkaWriteHeaders;
-                    options.PartitionKeyFields = partitionKeyFields;
-                })
+                });
+
+            foreach (var (tableName, fields) in partitionKeyFields)
+            {
+                if (fields.Count > 0)
+                {
+                    pgOutput2JsonBuilder.WithPartitionKeyFields(tableName, fields[0], [.. fields.Skip(1)]);
+                }
+            }
+
+            using var pgOutput2Json = pgOutput2JsonBuilder
                 .Build();
 
             await pgOutput2Json.StartAsync(stoppingToken);
