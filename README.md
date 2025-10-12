@@ -35,7 +35,7 @@ docker run --network=host --rm \
 
 That’s it. As rows change, PgHook will send messages to Kafka.
 
-> Want a stable replication position across restarts? Create the replication slot in PostgreSQL: 
+> Want a stable replication position across restarts? Create the replication slot in PostgreSQL:  
 > `SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');`  
 > 
 > Add environment variables:  
