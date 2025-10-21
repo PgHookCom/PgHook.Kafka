@@ -30,7 +30,7 @@ docker run --network=host --rm \
   -e PGH_PUBLICATION_NAMES="test_publication" \
   -e PGH_KAFKA_SERVERS="localhost:9092" \
   -e PGH_KAFKA_TOPIC="test_topic" \
-  pghook/pghook-kafka
+  pghook/kafka
 ```
 
 That’s it. As rows change, PgHook will send messages to Kafka.
@@ -63,5 +63,5 @@ docker run --network=host --rm \
   -e PGH_KAFKA_TOPIC="test_topic" \
   -e PGH_KAFKA_PARTITION_KEY_FIELDS_1="public.table_a|last_name,first_name" \
   -e PGH_KAFKA_PARTITION_KEY_FIELDS_2="public.table_b|postalcode,address" \
-  pghook/pghook-kafka
+  pghook/kafka
 ```
